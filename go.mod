@@ -1,4 +1,4 @@
-module go-ctags-mcp
+module ctags-mcp
 
 go 1.26.2
 

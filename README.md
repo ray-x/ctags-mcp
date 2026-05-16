@@ -1,4 +1,4 @@
-# go-ctags-mcp
+# ctags-mcp
 
 A lightweight MCP server that brings `ctags`-powered symbol search to AI coding clients and editors.
 
@@ -32,7 +32,7 @@ Arguments:
 ## Build
 
 ```bash
-go build -o go-ctags-mcp .
+go build -o ctags-mcp .
 ```
 
 ## Run

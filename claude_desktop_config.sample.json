@@ -1,9 +1,8 @@
 {
   "mcpServers": {
-    "go-ctags-mcp": {
-      "command": "/ABSOLUTE/PATH/TO/go-ctags-mcp",
+    "ctags-mcp": {
+      "command": "/ABSOLUTE/PATH/TO/ctags-mcp",
       "args": []
     }
   }
 }
-

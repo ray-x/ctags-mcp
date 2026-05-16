@@ -18,20 +18,20 @@ jobs:
         include:
           - goos: darwin
             goarch: arm64
-            binary_name: go-ctags-mcp-darwin-arm64
-            artifact_name: go-ctags-mcp-darwin-arm64
+            binary_name: ctags-mcp-darwin-arm64
+            artifact_name: ctags-mcp-darwin-arm64
           - goos: linux
             goarch: amd64
-            binary_name: go-ctags-mcp-linux-amd64
-            artifact_name: go-ctags-mcp-linux-amd64
+            binary_name: ctags-mcp-linux-amd64
+            artifact_name: ctags-mcp-linux-amd64
           - goos: windows
             goarch: amd64
-            binary_name: go-ctags-mcp-windows-amd64.exe
-            artifact_name: go-ctags-mcp-windows-amd64
+            binary_name: ctags-mcp-windows-amd64.exe
+            artifact_name: ctags-mcp-windows-amd64
           - goos: linux
             goarch: arm64
-            binary_name: go-ctags-mcp-linux-arm64
-            artifact_name: go-ctags-mcp-linux-arm64
+            binary_name: ctags-mcp-linux-arm64
+            artifact_name: ctags-mcp-linux-arm64
 
     steps:
       - name: Checkout

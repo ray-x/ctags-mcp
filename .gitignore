@@ -1,5 +1,5 @@
 # Build outputs
-go-ctags-mcp
+ctags-mcp
 *.exe
 *.dll
 *.so

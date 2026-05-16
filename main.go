@@ -54,7 +54,7 @@ const (
 
 func main() {
 	server := mcp.NewServer(&mcp.Implementation{
-		Name:    "go-ctags-server",
+		Name:    "ctags-mcp",
 		Version: "1.0.0",
 	}, nil)
 
@@ -405,7 +405,7 @@ func writeTagsFile(ctx context.Context, outputPath string, files []string) (retE
 		retErr = fmt.Errorf("writing tags header: %w", err)
 		return retErr
 	}
-	if _, err := tmp.WriteString("!_TAG_PROGRAM_NAME\tgo-ctags-mcp\t//\n"); err != nil {
+	if _, err := tmp.WriteString("!_TAG_PROGRAM_NAME\tctags-mcp\t//\n"); err != nil {
 		retErr = fmt.Errorf("writing tags header: %w", err)
 		return retErr
 	}
