@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "go-ctags-mcp": {
+      "type": "stdio",
+      "command": "/ABSOLUTE/PATH/TO/go-ctags-mcp",
+      "args": []
+    }
+  }
+}
+

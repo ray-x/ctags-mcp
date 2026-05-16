@@ -1,0 +1,30 @@
+# Build outputs
+go-ctags-mcp
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.o
+*.obj
+
+# Archives and packaged artifacts
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+*.bz2
+*.7z
+
+# Images and other non-source assets
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.pdf
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
