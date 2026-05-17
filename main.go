@@ -3,6 +3,9 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -46,6 +49,11 @@ type ctagsTag struct {
 type fileCacheEntry struct {
 	lines []string
 	err   error
+}
+
+type generatedTagsState struct {
+	Mode   string `json:"mode"`
+	Digest string `json:"digest"`
 }
 
 const (
@@ -94,6 +102,12 @@ func handleSearchSymbols(ctx context.Context, _ *mcp.CallToolRequest, args Searc
 
 	files, err := collectWorkspaceFiles(absWorkspacePath)
 	if err != nil {
+		return nil, nil, err
+	}
+
+	tagsPath := generatedTagsPath(absWorkspacePath)
+	files = excludeFiles(files, tagsPath)
+	if err := refreshGeneratedTags(ctx, absWorkspacePath, tagsPath, files); err != nil {
 		return nil, nil, err
 	}
 
@@ -178,6 +192,15 @@ func handleGenerateTags(ctx context.Context, _ *mcp.CallToolRequest, args Genera
 	if err := writeTagsFile(ctx, outputPath, files); err != nil {
 		return nil, GenerateTagsResult{}, err
 	}
+	if samePath(outputPath, generatedTagsPath(absWorkspacePath)) {
+		state, err := currentGeneratedTagsState(ctx, absWorkspacePath, files)
+		if err != nil {
+			return nil, GenerateTagsResult{}, err
+		}
+		if err := writeGeneratedTagsState(absWorkspacePath, state); err != nil {
+			return nil, GenerateTagsResult{}, err
+		}
+	}
 
 	displayPath := outputPath
 	if rel, relErr := filepath.Rel(absWorkspacePath, outputPath); relErr == nil && !strings.HasPrefix(rel, "..") {
@@ -189,6 +212,207 @@ func handleGenerateTags(ctx context.Context, _ *mcp.CallToolRequest, args Genera
 		TagsPath:      displayPath,
 		FileCount:     len(files),
 	}, nil
+}
+
+func generatedTagsPath(workspacePath string) string {
+	return filepath.Join(workspacePath, "tags")
+}
+
+func generatedTagsStatePath(workspacePath string) string {
+	return filepath.Join(workspacePath, ".ctags-mcp", "tags.state")
+}
+
+func refreshGeneratedTags(ctx context.Context, workspacePath, tagsPath string, files []string) error {
+	currentState, err := currentGeneratedTagsState(ctx, workspacePath, files)
+	if err != nil {
+		return err
+	}
+
+	storedState, ok, err := readGeneratedTagsState(generatedTagsStatePath(workspacePath))
+	if err != nil {
+		return err
+	}
+	if ok && sameGeneratedTagsState(storedState, currentState) {
+		if _, err := os.Stat(tagsPath); err == nil {
+			return nil
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("checking tags file: %w", err)
+		}
+	}
+
+	if err := writeTagsFile(ctx, tagsPath, files); err != nil {
+		return err
+	}
+	if err := writeGeneratedTagsState(workspacePath, currentState); err != nil {
+		return err
+	}
+	return nil
+}
+
+func currentGeneratedTagsState(ctx context.Context, workspacePath string, files []string) (generatedTagsState, error) {
+	if payload, ok, err := gitWorktreeSignature(ctx, workspacePath); err != nil {
+		return generatedTagsState{}, err
+	} else if ok {
+		return generatedTagsState{Mode: "git", Digest: digestSignature("git", payload)}, nil
+	}
+
+	payload, err := fileSetSignature(files)
+	if err != nil {
+		return generatedTagsState{}, err
+	}
+	return generatedTagsState{Mode: "mtime", Digest: digestSignature("mtime", payload)}, nil
+}
+
+func gitWorktreeSignature(ctx context.Context, workspacePath string) (string, bool, error) {
+	if _, err := exec.LookPath("git"); err != nil {
+		return "", false, nil
+	}
+
+	if output, err := exec.CommandContext(ctx, "git", "-C", workspacePath, "rev-parse", "--is-inside-work-tree").Output(); err != nil {
+		return "", false, nil
+	} else if strings.TrimSpace(string(output)) != "true" {
+		return "", false, nil
+	}
+
+	head, err := exec.CommandContext(ctx, "git", "-C", workspacePath, "rev-parse", "HEAD").Output()
+	if err != nil {
+		return "", true, fmt.Errorf("reading git HEAD: %w", err)
+	}
+
+	status, err := exec.CommandContext(ctx, "git", "-C", workspacePath, "status", "--porcelain=v1", "--untracked-files=normal").Output()
+	if err != nil {
+		return "", true, fmt.Errorf("reading git status: %w", err)
+	}
+
+	dirtyPaths, err := gitDirtyPaths(ctx, workspacePath)
+	if err != nil {
+		return "", true, err
+	}
+
+	payload := strings.TrimSpace(string(head)) + "\n" + string(status)
+	if len(dirtyPaths) > 0 {
+		dirtySignature, err := fileSetSignaturePaths(workspacePath, dirtyPaths)
+		if err != nil {
+			return "", true, err
+		}
+		payload += "\n" + dirtySignature
+	}
+
+	return payload, true, nil
+}
+
+func fileSetSignature(files []string) (string, error) {
+	sorted := append([]string(nil), files...)
+	sort.Strings(sorted)
+
+	var builder strings.Builder
+	for _, file := range sorted {
+		info, err := os.Stat(file)
+		if err != nil {
+			return "", fmt.Errorf("checking source file %s: %w", file, err)
+		}
+		fmt.Fprintf(&builder, "%s\t%d\t%d\n", file, info.Size(), info.ModTime().UnixNano())
+	}
+	return builder.String(), nil
+}
+
+func fileSetSignaturePaths(root string, relPaths []string) (string, error) {
+	sorted := append([]string(nil), relPaths...)
+	sort.Strings(sorted)
+
+	var builder strings.Builder
+	for _, relPath := range sorted {
+		fullPath := filepath.Join(root, relPath)
+		info, err := os.Stat(fullPath)
+		if err != nil {
+			return "", fmt.Errorf("checking source file %s: %w", fullPath, err)
+		}
+		fmt.Fprintf(&builder, "%s\t%d\t%d\n", relPath, info.Size(), info.ModTime().UnixNano())
+	}
+	return builder.String(), nil
+}
+
+func gitDirtyPaths(ctx context.Context, workspacePath string) ([]string, error) {
+	output, err := exec.CommandContext(ctx, "git", "-C", workspacePath, "ls-files", "-m", "-o", "--exclude-standard", "-z").Output()
+	if err != nil {
+		return nil, fmt.Errorf("reading dirty git paths: %w", err)
+	}
+	if len(output) == 0 {
+		return nil, nil
+	}
+
+	var paths []string
+	for _, path := range strings.Split(string(output), "\x00") {
+		if path == "" {
+			continue
+		}
+		paths = append(paths, path)
+	}
+	return paths, nil
+}
+
+func digestSignature(mode, payload string) string {
+	sum := sha256.Sum256([]byte(mode + "\x00" + payload))
+	return hex.EncodeToString(sum[:])
+}
+
+func readGeneratedTagsState(path string) (generatedTagsState, bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return generatedTagsState{}, false, nil
+		}
+		return generatedTagsState{}, false, fmt.Errorf("reading generated tags state: %w", err)
+	}
+
+	var state generatedTagsState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return generatedTagsState{}, false, nil
+	}
+	if state.Mode == "" || state.Digest == "" {
+		return generatedTagsState{}, false, nil
+	}
+	return state, true, nil
+}
+
+func writeGeneratedTagsState(workspacePath string, state generatedTagsState) error {
+	path := generatedTagsStatePath(workspacePath)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("creating generated tags state directory: %w", err)
+	}
+
+	tmp, err := os.CreateTemp(dir, ".tags-state-*")
+	if err != nil {
+		return fmt.Errorf("creating generated tags state file: %w", err)
+	}
+	tmpPath := tmp.Name()
+
+	encoder := json.NewEncoder(tmp)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(state); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("writing generated tags state: %w", err)
+	}
+
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("closing generated tags state file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("moving generated tags state file into place: %w", err)
+	}
+	return nil
+}
+
+func sameGeneratedTagsState(a, b generatedTagsState) bool {
+	return a.Mode == b.Mode && a.Digest == b.Digest
+}
+
+func samePath(a, b string) bool {
+	return filepath.Clean(a) == filepath.Clean(b)
 }
 
 func collectWorkspaceFiles(root string) ([]string, error) {
