@@ -18,6 +18,17 @@ Arguments:
 
 `generate_tags` writes a BSD `ctags` tags file for the workspace. It defaults to `workspace_path/tags`, and you can override the output path with `output_path`.
 
+## Downloads
+
+Latest binaries:
+
+| Platform | Binary |
+| --- | --- |
+| macOS ARM64 | [ctags-mcp-darwin-arm64](https://github.com/ray-x/ctags-mcp/releases/latest/download/ctags-mcp-darwin-arm64) |
+| Linux AMD64 | [ctags-mcp-linux-amd64](https://github.com/ray-x/ctags-mcp/releases/latest/download/ctags-mcp-linux-amd64) |
+| Linux ARM64 | [ctags-mcp-linux-arm64](https://github.com/ray-x/ctags-mcp/releases/latest/download/ctags-mcp-linux-arm64) |
+| Windows AMD64 | [ctags-mcp-windows-amd64.exe](https://github.com/ray-x/ctags-mcp/releases/latest/download/ctags-mcp-windows-amd64.exe) |
+
 ## Why choose this over other solutions?
 
 - 🚀 **Zero Dependencies & Instant Setup:** Written in Go and compiled into a single executable binary. No Python environment, node_modules, or shell wrappers required. Just download and run.
